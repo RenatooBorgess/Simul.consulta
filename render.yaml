@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: simul-sistema-de-lixo
+    runtime: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false
