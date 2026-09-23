@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
+/*
+ * AUDITORIA DE SOFTWARE - SIMUL
+ * Este arquivo foi analisado conforme o checklist da atividade:
+ * estrutura, qualidade, padronização, versionamento, documentação,
+ * build/execução e manutenibilidade.
+ *
+ * Os comentários marcados como "AUDITORIA" registram pontos encontrados
+ * durante a análise e sugestões de melhoria. Eles não substituem a
+ * implementação das correções; servem como evidência/documentação da auditoria.
+ */
+
 const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
 const TOKEN_KEY = 'simul_token'
 
@@ -16,6 +27,15 @@ const demoCronogramas = [
   { diaSemana: 'QUINTA', inicio: '07:00', fim: '11:00' },
 ]
 
+/*
+ * AUDITORIA - MELHORIA DE MANUTENIBILIDADE:
+ * A função de requisição foi centralizada, evitando repetir a montagem
+ * de headers, token, leitura da resposta e tratamento básico de erros.
+ *
+ * MELHORIA FUTURA RECOMENDADA:
+ * Mover esta função para src/services/api.js para separar comunicação
+ * com a API da camada de interface.
+ */
 async function request(path, options = {}) {
   if (!API_URL) throw new Error('API não configurada')
   const headers = { Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}) }
@@ -28,6 +48,18 @@ async function request(path, options = {}) {
   return data
 }
 
+/*
+ * AUDITORIA - ESTRUTURA:
+ * Este hook já possui uma responsabilidade relativamente específica.
+ *
+ * PONTO DE MELHORIA:
+ * O fallback para demoAreas permite que a interface continue funcionando
+ * quando a API falha, mas pode esconder um problema real de comunicação.
+ * Em produção, recomenda-se diferenciar "API indisponível" de "dados de demonstração".
+ *
+ * MELHORIA DE ARQUITETURA:
+ * Este hook pode ser movido para src/hooks/useAreas.js.
+ */
 function useAreas() {
   const [areas, setAreas] = useState([])
   const [loading, setLoading] = useState(true)
@@ -107,6 +139,16 @@ function Consulta() {
   const [erro, setErro] = useState('')
   const cidades = useMemo(() => [...new Set(areas.map(a => a.cidade).filter(Boolean))].sort(), [areas])
   const bairros = useMemo(() => [...new Set(areas.filter(a => a.cidade === cidade).map(a => a.bairro).filter(Boolean))].sort(), [areas, cidade])
+
+  /*
+   * AUDITORIA - QUALIDADE / MANUTENIBILIDADE:
+   * Este componente concentra seleção de região, chamada à API,
+   * tratamento de erro e apresentação do resultado.
+   *
+   * Classificação: 🟠 MÉDIO.
+   * Recomenda-se separar a consulta à API e componentes visuais em módulos
+   * próprios para reduzir a quantidade de responsabilidades deste arquivo.
+   */
   async function consultar(e) {
     e.preventDefault(); setErro(''); setResultado(null)
     if (!cidade || !bairro) { setErro('Escolha a cidade e o bairro para continuar.'); return }
@@ -115,6 +157,16 @@ function Consulta() {
       const data = await request(`/api/rotas/consulta?${new URLSearchParams({ cidade, bairro })}`)
       setResultado(data)
     } catch {
+      /*
+       * AUDITORIA - PONTO DE ATENÇÃO:
+       * Em caso de falha da API, dados de demonstração são exibidos.
+       * Isso melhora a experiência de demonstração, mas pode mascarar
+       * uma falha do backend em ambiente real.
+       *
+       * MELHORIA PROPOSTA:
+       * Em produção, informar claramente que a API está indisponível
+       * antes de utilizar dados de demonstração.
+       */
       const area = areas.find(a => a.cidade === cidade && a.bairro === bairro)
       setResultado({ cidade, bairro, rotaId: area?.rotaId || 1, nomeRota: area?.rota || 'Rota de coleta seletiva', cronogramas: demoCronogramas })
     } finally { setBusy(false) }
@@ -147,6 +199,17 @@ function Material({ icon, title, text }) { return <article className="material">
 function AuthCard({ type }) {
   const navigate = useNavigate(); const login = type === 'login'
   const [nome, setNome] = useState(''); const [email, setEmail] = useState(''); const [senha, setSenha] = useState(''); const [confirm, setConfirm] = useState(''); const [erro, setErro] = useState(''); const [busy, setBusy] = useState(false)
+
+  /*
+   * AUDITORIA - QUALIDADE:
+   * AuthCard concentra login e cadastro no mesmo componente.
+   * Isso reduz duplicação de interface, mas também aumenta a quantidade
+   * de responsabilidades do componente.
+   *
+   * MELHORIA FUTURA:
+   * Separar validação, comunicação com a API e componentes de formulário
+   * em módulos próprios caso a autenticação cresça.
+   */
   async function submit(e) {
     e.preventDefault(); setErro('')
     if (!email || !senha || (!login && (!nome || senha !== confirm))) { setErro(login ? 'Preencha e-mail e senha.' : 'Preencha os campos e confira as senhas.'); return }
@@ -174,12 +237,50 @@ function Cadastro() { return <AuthCard type="register"/> }
 
 function Conta() {
   const [user, setUser] = useState(null); const [erro,setErro]=useState('')
+
+  /*
+   * AUDITORIA - ERRO ENCONTRADO (🟠 MÉDIO):
+   * O catch abaixo trata a falha colocando um usuário de demonstração
+   * em setUser. Como o erro é consumido pelo primeiro catch, o segundo
+   * catch não funciona como tratamento independente do erro original.
+   *
+   * PROPOSTA DA ATIVIDADE:
+   * Reestruturar este fluxo com try/catch (ou um único catch) para que
+   * a mensagem de erro seja registrada corretamente em setErro.
+   *
+   * OBSERVAÇÃO:
+   * Este comentário documenta o problema encontrado; a correção do
+   * comportamento deve ser feita em uma alteração específica de código.
+   */
   useEffect(()=>{ request('/api/usuarios/me').then(setUser).catch(()=>setUser({nome:'Usuário SIMUL',email:'conta configurada',perfil:'USUARIO'})).catch(e=>setErro(e.message)) },[])
+
+  /*
+   * AUDITORIA - ERRO DE INTERFACE (🟠 MÉDIO):
+   * O título abaixo utiliza "Olá, {nome}" como texto literal.
+   * Não existe uma variável nome definida neste componente e, em JSX,
+   * as chaves não são interpretadas quando estão dentro de uma string.
+   *
+   * CORREÇÃO PROPOSTA:
+   * Usar uma expressão JSX baseada em user?.nome, por exemplo:
+   * title={`Olá, ${user?.nome || 'usuário'}`}
+   */
   return <Page eyebrow="MINHA CONTA" title="Olá, {nome}" text="Aqui você encontra seus atalhos e configurações."><div className="profile-card"><div className="avatar">{user?.nome?.[0] || 'U'}</div><div><span className="eyebrow">PERFIL</span><h2>{user?.nome || 'Carregando...'}</h2><p>{user?.email || ''}</p><span className="tag">{user?.perfil === 'ADMIN' ? 'Administrador' : 'Morador'}</span></div></div>{erro && <div className="alert alert--error">{erro}</div>}<div className="shortcut-grid"><Link to="/" className="shortcut"><span>♻</span><b>Consultar coleta</b><small>Ver dias e horários da sua região.</small></Link><Link to="/preferencias" className="shortcut"><span>🔔</span><b>Meus lembretes</b><small>Escolher rota e antecedência.</small></Link><Link to="/admin" className="shortcut"><span>⚙</span><b>Painel administrativo</b><small>Área reservada para administradores.</small></Link></div></Page>
 }
 
 function Preferencias() {
   const { areas } = useAreas(); const [cidade,setCidade]=useState(''); const [bairro,setBairro]=useState(''); const [email,setEmail]=useState(true); const [horas,setHoras]=useState(3); const [msg,setMsg]=useState(''); const [erro,setErro]=useState(''); const bairros=[...new Set(areas.filter(a=>a.cidade===cidade).map(a=>a.bairro))].sort()
+
+  /*
+   * AUDITORIA - QUALIDADE / CONFIABILIDADE (🟠 MÉDIO):
+   * Quando a API de preferências falha, o código mostra uma mensagem
+   * informando que as preferências foram atualizadas no painel.
+   * Isso pode ser interpretado como sucesso mesmo quando a gravação
+   * no servidor não aconteceu.
+   *
+   * MELHORIA PROPOSTA:
+   * Separar claramente "salvo no servidor" de "alteração local/demonstração"
+   * e informar o usuário quando a API estiver indisponível.
+   */
   async function save(e){e.preventDefault();setErro('');setMsg('');if(!cidade||!bairro){setErro('Escolha sua cidade e seu bairro.');return}try{await request('/api/notificacoes/preferencias',{method:'PUT',body:JSON.stringify({rotaId:areas.find(a=>a.cidade===cidade&&a.bairro===bairro)?.rotaId,emailAtivo:email,antecedenciaHoras:Number(horas)})});setMsg('Preferências salvas com sucesso.')}catch{setMsg('Preferências atualizadas neste painel. Ao conectar a API, elas serão persistidas no servidor.')}}
   return <Page eyebrow="LEMBRETES" title="Deixe o SIMUL lembrar por você." text="Escolha sua região e diga com quanto tempo de antecedência você quer receber o aviso."><form className="settings-card form-stack" onSubmit={save}><div className="settings-section"><span className="step-number">1</span><div><h2>Minha região</h2><p>Ela será usada para relacionar o lembrete à rota correta.</p></div></div><div className="form-grid"><label>Cidade<select value={cidade} onChange={e=>{setCidade(e.target.value);setBairro('')}}><option value="">Selecione</option>{[...new Set(areas.map(a=>a.cidade))].map(x=><option key={x}>{x}</option>)}</select></label><label>Bairro<select value={bairro} onChange={e=>setBairro(e.target.value)} disabled={!cidade}><option value="">Selecione</option>{bairros.map(x=><option key={x}>{x}</option>)}</select></label></div><div className="settings-section"><span className="step-number">2</span><div><h2>Quando avisar?</h2><p>O sistema poderá enviar o lembrete por e-mail sem você precisar estar com o site aberto.</p></div></div><label>Antecedência<select value={horas} onChange={e=>setHoras(e.target.value)}><option value="0">No momento da coleta</option><option value="1">1 hora antes</option><option value="3">3 horas antes</option><option value="6">6 horas antes</option><option value="12">12 horas antes</option><option value="24">1 dia antes</option></select></label><label className="switch-row"><input type="checkbox" checked={email} onChange={e=>setEmail(e.target.checked)}/><span><b>Receber lembrete por e-mail</b><small>Você pode alterar essa opção quando quiser.</small></span></label>{erro&&<div className="alert alert--error">{erro}</div>}{msg&&<div className="alert alert--success">{msg}</div>}<button className="button button--primary" type="submit">Salvar preferências</button></form></Page>
 }
@@ -190,7 +291,19 @@ function Admin() {
   const cards=[['Rotas',rotas.length || 3,'Rotas oficiais cadastradas'],['Áreas',areas.length, 'Regiões disponíveis'],['Cronogramas',cron.length || 2,'Horários configurados']]
   return <Page eyebrow="ADMINISTRAÇÃO" title="Painel do SIMUL" text="Um espaço direto para manter as informações que chegam ao morador sempre organizadas."><div className="admin-tabs">{[['resumo','Visão geral'],['rotas','Rotas'],['areas','Áreas atendidas'],['cron','Cronogramas']].map(([id,label])=><button className={tab===id?'active':''} key={id} onClick={()=>setTab(id)}>{label}</button>)}</div>{tab==='resumo'&&<><div className="metric-grid">{cards.map(([a,b,c])=><div className="metric" key={a}><span>{a}</span><strong>{b}</strong><small>{c}</small></div>)}</div><div className="admin-note"><b>Boa prática</b><p>As informações administrativas alimentam a consulta pública e os lembretes. Antes de alterar uma rota, confira a cidade, o bairro e os horários associados.</p></div></>}{tab==='rotas'&&<AdminTable title="Rotas cadastradas" rows={rotas} empty="A API ainda não retornou rotas. A estrutura está pronta para o CRUD."/>}{tab==='areas'&&<AdminTable title="Áreas atendidas" rows={areas} empty="Nenhuma área cadastrada."/>}{tab==='cron'&&<AdminTable title="Cronogramas" rows={cron} empty="Nenhum cronograma cadastrado."/>}</Page>
 }
-function AdminTable({title,rows,empty}){return <div className="table-card"><div className="table-card__head"><h2>{title}</h2><button className="button button--secondary">+ Novo</button></div>{rows.length?<div className="table-wrap"><table><thead><tr><th>Identificação</th><th>Detalhes</th><th>Status</th></tr></thead><tbody>{rows.map((r,i)=><tr key={r.id||i}><td>{r.nomeRota||r.nome||r.bairro||`Registro ${i+1}`}</td><td>{r.cidade||r.diaSemana||'Informação operacional'}</td><td><span className="status status--small">● {r.ativo===false?'Inativo':'Ativo'}</span></td></tr>)}</tbody></table></div>:<div className="empty">{empty}</div>}</div>}
+function AdminTable({title,rows,empty}){
+  /*
+   * AUDITORIA - FUNCIONALIDADE INCOMPLETA (🟠 MÉDIO):
+   * O botão "+ Novo" aparece na interface, mas não possui onClick nem
+   * formulário associado. A interface sugere um CRUD que ainda não está
+   * implementado neste componente.
+   *
+   * CORREÇÃO PROPOSTA:
+   * Implementar o fluxo de criação (formulário/modal + POST na API)
+   * ou ocultar o botão enquanto a funcionalidade não estiver disponível.
+   */
+  return <div className="table-card"><div className="table-card__head"><h2>{title}</h2><button className="button button--secondary">+ Novo</button></div>{rows.length?<div className="table-wrap"><table><thead><tr><th>Identificação</th><th>Detalhes</th><th>Status</th></tr></thead><tbody>{rows.map((r,i)=><tr key={r.id||i}><td>{r.nomeRota||r.nome||r.bairro||`Registro ${i+1}`}</td><td>{r.cidade||r.diaSemana||'Informação operacional'}</td><td><span className="status status--small">● {r.ativo===false?'Inativo':'Ativo'}</span></td></tr>)}</tbody></table></div>:<div className="empty">{empty}</div>}</div>
+}
 
 function Footer(){return <footer className="footer"><div><b>♻ SIMUL</b><p>Sistema Integrado de Monitoramento Urbano de Limpeza.</p></div><div><span>Projeto acadêmico · FATESG SENAI</span><small>Informações de coleta sujeitas aos dados cadastrados no sistema.</small></div></footer>}
 
